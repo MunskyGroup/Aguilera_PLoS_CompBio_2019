@@ -1,0 +1,177 @@
+%% Testing pool for plasmid and sequences with tag detection
+function [generated_geneSequence, typeOfTag,tagPositions,parametersModel,geneLength ] = sequenceAnalyzer_Optimized(input_file,k_initiation, k_elongationMean,optimization)
+%% Defining the gene sequences
+
+try
+whole_gene = fastaread(input_file);
+catch
+    whole_gene.Sequence =input_file;
+end
+
+typeOfTag = [];
+tagPositions = [];
+geneSequence = [];
+
+%% Defining the distinct tag sequences
+T_SunTag = 'EELLSKNYHLENEVARLKK';
+T_Flag = 'DYKDDDDK';
+T_Hemagglutinin = 'YPYDVPDYA';
+
+try
+%% Detecting all the possible ORFs in the gene
+orfPositions = seqshoworfs(whole_gene.Sequence,'MinimumLength',100, 'nodisplay', 'true','Frames',1);
+
+%% Read each possible ORF and trasnlate those sequences from DNA to protein
+counter = 1;
+for i =1: length (orfPositions)
+    for j =1: length (orfPositions(i).Start)
+        try
+            temporal_ORF{counter} = whole_gene.Sequence (orfPositions(i).Start(j):orfPositions(i).Stop(j)-1);
+            temporal_Proteins {counter} =   nt2aa(temporal_ORF{counter});
+            counter = counter+1;
+        catch
+        end
+    end
+end
+
+%% Find if one of those proteins contains the tags.
+
+position_SunTag = strfind(temporal_Proteins,T_SunTag);
+position_Flag = strfind(temporal_Proteins,T_Flag);
+position_Hemagglutinin = strfind(temporal_Proteins,T_Hemagglutinin);
+
+%# find empty cells in the cell array
+emptyCells_SunTag = cellfun(@isempty,position_SunTag);
+emptyCells_Flag = cellfun(@isempty,position_Flag);
+emptyCells_Hemagglutinin = cellfun(@isempty,position_Hemagglutinin);
+
+% selecting the Number of Protein that contains the Tag region
+selected_counter_SunTag = find(~emptyCells_SunTag,1);
+selected_counter_Flag = find(~emptyCells_Flag,1);
+selected_counter_Hemagglutinin = find(~emptyCells_Hemagglutinin,1);
+
+%# remove empty cells
+position_SunTag(emptyCells_SunTag) = [];
+position_Flag(emptyCells_Flag) = [];
+position_Hemagglutinin(emptyCells_Hemagglutinin) = [];
+
+
+%% Finding the type of Tags
+if isempty(position_SunTag) ==0
+    typeOfTag = 'SunTag';
+    tagPositions = position_SunTag{1};
+    geneSequence = upper(temporal_ORF{selected_counter_SunTag});
+end
+
+if isempty(position_Flag) == 0
+    typeOfTag = 'Flag';
+    tagPositions = position_Flag{1};
+    geneSequence = upper(temporal_ORF{selected_counter_Flag});
+end
+
+if isempty(position_Hemagglutinin) ==0
+    typeOfTag = 'HA';
+    tagPositions = position_Hemagglutinin{1};
+    geneSequence = upper(temporal_ORF{selected_counter_Hemagglutinin});
+end
+
+if isempty(position_Hemagglutinin) ==0 && isempty(position_Flag) == 0
+    typeOfTag = 'HA_Flag';
+    tagPositions = [position_Hemagglutinin{1}];
+    geneSequence = upper(temporal_ORF{selected_counter_Hemagglutinin});
+end
+
+if isempty(position_Hemagglutinin) ==0 && isempty(position_SunTag) ==0
+    typeOfTag = 'HA_SunTag';
+    tagPositions = [position_SunTag{1}];
+    geneSequence = upper(temporal_ORF{selected_counter_Hemagglutinin});
+end
+
+generated_geneSequence.Sequence= geneSequence;
+catch
+end
+
+if isempty (typeOfTag) ==1
+tagSeq='ATGGACTACAAGGACGACGACGACAAAGGTGACTACAAAGATGATGACGATAAAGGCGACTATAAGGACGATGACGACAAGGGCGGAAACTCACTGATCAAGGAAAACATGCGGATGAAGGTGGTGATGGAGGGCTCCGTGAATGGTCACCAGTTCAAGTGCACCGGAGAGGGAGAGGGAAACCCGTACATGGGAACTCAGACCATGCGCATTAAGGTCATCGAAGGAGGTCCGCTGCCGTTCGCTTTCGATATCCTGGCCACTTCGTTCGGAGGAGGGTCGCGCACGTTCATCAAGTACCCGAAGGGAATCCCGGACTTCTTTAAGCAGTCATTCCCGGAAGGATTCACTTGGGAACGGGTGACCCGGTATGAAGATGGAGGTGTGGTGACTGTCATGCAAGATACTTCGCTGGAGGATGGGTGCCTCGTGTACCACGTCCAAGTCCGCGGAGTGAATTTCCCGTCCAACGGACCAGTGATGCAGAAAAAGACGAAGGGTTGGGAACCTAATACTGAAATGATGTACCCCGCAGACGGAGGGCTGAGGGGCTACACCCACATGGCGCTGAAGGTCGACGGAGGAGATTACAAGGATGACGACGATAAGCAACAAGATTACAAAGACGATGATGACAAGGGCCAGCAGGGCGACTACAAGGACGACGACGACAAGCAGCAGGACTACAAAGATGACGATGATAAAGGAGGAGGACATCTGTCCTGTTCGTTCGTGACCACCTACAGATCAAAGAAAACCGTGGGAAACATCAAGATGCCGGGCATTCATGCCGTCGACCACCGCCTGGAGCGGCTCGAAGAATCAGACAATGAGATGTTCGTCGTGCAAAGAGAACATGCCGTGGCCAAGTTCGCGGGACTGGGAGGCGGTGGAGGCGATTACAAAGACGATGATGACAAGGGTGACTATAAAGACGACGATGACAAAGGGGATTACAAGGATGATGATGATAAGGGAGGCGGTGGATCAGGTGGAGGAGGTTCACTGCAG';
+geneSequence = strcat(tagSeq,whole_gene.Sequence);
+geneSequence = upper(geneSequence);
+tagPositions = [2,11,20,196,206,218,228,299,309,318];
+ typeOfTag = 'Flag';
+end
+codons = geneSequence;
+geneLength = length(codons)/3;
+
+%% Elongation constant.
+k_elongation=  zeros (1,geneLength );
+genomicCopyNumber;
+tRNA_copyNumber = zeros (1,geneLength );
+
+
+%%  Separating sequence in codons.
+counter = 1;
+for i =1 : geneLength
+    separated_codons(i,:) = codons(counter : counter + 2);
+    counter = counter + 3;
+end
+
+
+
+
+%% Elongation constant.
+k_elongation=  zeros (1,geneLength );
+k_elongation_fast=  zeros (1,geneLength );
+k_elongation_slow=  zeros (1,geneLength );
+k_elongation_constant = zeros (1,geneLength );
+
+genomicCopyNumber;
+tRNA_copyNumber = zeros (1,geneLength );
+tRNA_copyNumber_fastCodons = zeros (1,geneLength );
+tRNA_copyNumber_slowCodons = zeros (1,geneLength );
+
+for i = 1 : geneLength
+    field = separated_codons(i,:);
+    tRNA_copyNumber (i) = strGenCopy.(field) ;
+    tRNA_copyNumber_fastCodons(i) = strGenCopy_Fast.(field);
+    tRNA_copyNumber_slowCodons(i) = strGenCopy_Slow.(field);
+end
+
+% % calculating the mean values in the structure
+ mean_tRNACopyNumber = mean (mean(reshape(struct2array(strGenCopy),numel(fieldnames(strGenCopy)),[]),2));
+ for i = 1 : geneLength
+     k_elongation(i)= (tRNA_copyNumber (i)/ mean_tRNACopyNumber)* k_elongationMean;
+     k_elongation_fast(i)= (tRNA_copyNumber_fastCodons (i)/ mean_tRNACopyNumber)* k_elongationMean;
+     k_elongation_slow(i)= (tRNA_copyNumber_slowCodons (i)/ mean_tRNACopyNumber)* k_elongationMean;
+     k_elongation_constant(i)= k_elongationMean;
+ end
+
+
+if strcmp (optimization ,'optimized') ==1
+    parametersModel = [k_initiation,k_elongation_fast,10];
+end
+if strcmp (optimization ,'deoptimized') ==1
+    parametersModel = [k_initiation,k_elongation_slow,10];
+end
+if strcmp (optimization ,'natural') ==1
+    parametersModel = [k_initiation,k_elongation,10];
+end
+if strcmp (optimization ,'constant') ==1
+    parametersModel = [k_initiation,k_elongation_constant,10];
+end
+
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
